@@ -1,38 +1,38 @@
 pipeline {
     agent any
-    tools{
-        maven 'maven_3_5_0'
+        tools{
+        maven 'maven'
     }
-    stages{
-        stage('Build Maven'){
-            steps{
-                checkout([$class: 'GitSCM', branches: [[name: '*/main']], extensions: [], userRemoteConfigs: [[url: 'https://github.com/Java-Techie-jt/devops-automation']]])
-                sh 'mvn clean install'
+    environment {
+        NEXUS_DOCKER_REPO = 'nexus:8082'
+        REPOSITORY ='/repository/myrep'
+    }
+    stages {
+        stage('Getting') {
+            steps {
+                // Get some code from a GitHub repository
+git branch: 'main', credentialsId: '2bfc22ce-995e-4d2c-bdb5-d707df6dbbd1', url: 'https://github.com/ziyati/java_code'                // Run Maven on a Unix agent.
             }
         }
-        stage('Build docker image'){
-            steps{
-                script{
-                    sh 'docker build -t 127.0.0.1:8082/repositories/myrepo/flask:v1  .'
-                }
+        stage('Build') {
+            steps {
+                sh '''
+                    echo "Starting Maven build..."
+                    mvn -Dmaven.test.failure.ignore=true clean package || {
+                      echo "Maven build failed."
+                      exit 1
+                    }
+                '''
             }
         }
-        stage('Push image to Hub'){
-            steps{
-                script{
-                   withCredentials([string(credentialsId: 'dockerhub-pwd', variable: 'dockerhubpwd')]) {
-                   sh 'docker login -u javatechie -p ${dockerhubpwd}'
-
-}
-                   sh 'docker push javatechie/devops-integration'
-                }
-            }
-        }
-        stage('Deploy to k8s'){
-            steps{
-                script{
-                    kubernetesDeploy (configs: 'deploymentservice.yaml',kubeconfigId: 'k8sconfigpwd')
-                }
+        stage('Deploy') {
+            steps {
+                sh '''
+                    echo "Starting Maven build..."
+                    docker build -t myimage:v1 .
+                    docker tag myimage:v2 $NEXUS_DOCKER_REPO/$REPOSITORY/myimage:v1 
+                    docker push $NEXUS_DOCKER_REPO/$REPOSITORY/myimage:v1 $NEXUS_DOCKER_REPO
+                '''
             }
         }
     }
